@@ -14,6 +14,7 @@ export type State = {
 };
 
 const sql = postgres(process.env.POSTGRES_URL!, {ssl: 'require'});
+//Client side validation
 const FormSchema = z.object({
   id: z.string(),
   customerId: z.string({
@@ -27,6 +28,8 @@ const FormSchema = z.object({
   }),
   date: z.string(),
 });
+
+//Server side validation
 const CreateInvoice = FormSchema.omit({id: true, date: true})
 export async function createInvoice(prevState: State, formData: FormData) {
   const validatedFields = CreateInvoice.safeParse({
@@ -34,6 +37,7 @@ export async function createInvoice(prevState: State, formData: FormData) {
     amount: formData.get('amount'),
     status: formData.get('status'),
   });
+  console.log(validatedFields);
  
   // If form validation fails, return errors early. Otherwise, continue.
   if (!validatedFields.success) {
@@ -55,8 +59,9 @@ export async function createInvoice(prevState: State, formData: FormData) {
       VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
   } catch (error) {
-    // We'll log the error to the console for now
-    console.error(error);
+    return {
+      message: 'Database Error: Failed to Create Invoice.',
+    }
   }
  
   revalidatePath('/dashboard/invoices');
@@ -68,13 +73,21 @@ const UpdateInvoice = FormSchema.omit({ id: true, date: true });
  
 // ...
  
-export async function updateInvoice(id: string, formData: FormData) {
-  const { customerId, amount, status } = UpdateInvoice.parse({
+export async function updateInvoice(id: string, prevState: State, formData: FormData) {
+  const validatedFields = UpdateInvoice.safeParse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
     status: formData.get('status'),
   });
- 
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Update Invoice.',
+    };
+  }
+
+  const { customerId, amount, status } = validatedFields.data;
   const amountInCents = amount * 100;
  
   try {
@@ -84,8 +97,9 @@ export async function updateInvoice(id: string, formData: FormData) {
         WHERE id = ${id}
       `;
   } catch (error) {
-    // We'll log the error to the console for now
-    console.error(error);
+    return {
+      message: 'Database Error: Failed to Update Invoice.',
+    }
   }
  
   revalidatePath('/dashboard/invoices');
